@@ -90,6 +90,8 @@ async function initializeDirectories() {
   }
 }
 
+
+
 // Start server
 async function startServer() {
   try {

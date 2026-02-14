@@ -6,15 +6,54 @@ const router = express.Router();
 
 const LANGUAGES = ['ru', 'en', 'es', 'fr'];
 
-// GET all blogs for a specific language
+// GET all blogs (admin) - barcha tillar uchun
+router.get('/admin/all', authMiddleware, async (req, res) => {
+  try {
+    // Admin va moderator ko'ra oladi
+    const result = await db.query(`
+      SELECT 
+        b.id,
+        b.type,
+        b.created_at,
+        b.updated_at,
+        json_object_agg(
+          bt.language,
+          json_build_object(
+            'title', bt.title,
+            'date', bt.date,
+            'source', bt.source,
+            'content', bt.content
+          )
+        ) FILTER (WHERE bt.language IS NOT NULL) as translations
+      FROM blogs b
+      LEFT JOIN blog_translations bt ON b.id = bt.blog_id
+      GROUP BY b.id, b.type, b.created_at, b.updated_at
+      ORDER BY b.id DESC
+    `);
+
+    res.json({
+      success: true,
+      data: result.rows
+    });
+
+  } catch (error) {
+    console.error('Get all blogs error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Bloglarni olishda xatolik'
+    });
+  }
+});
+
+// GET all blogs for a specific language (public)
 router.get('/:lang', async (req, res) => {
   try {
     const { lang } = req.params;
-    
+
     if (!LANGUAGES.includes(lang)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Noto\'g\'ri til' 
+      return res.status(400).json({
+        success: false,
+        message: 'Noto\'g\'ri til'
       });
     }
 
@@ -35,19 +74,19 @@ router.get('/:lang', async (req, res) => {
 
     // Get images for each blog
     const blogsWithImages = await Promise.all(
-      result.rows.map(async (blog) => {
-        const imagesResult = await db.query(`
+        result.rows.map(async (blog) => {
+          const imagesResult = await db.query(`
           SELECT image_url, image_order, is_array
           FROM blog_images
           WHERE blog_id = $1 AND language = $2
           ORDER BY image_order
         `, [blog.id, lang]);
 
-        return {
-          ...blog,
-          images: imagesResult.rows.map(img => img.image_url)
-        };
-      })
+          return {
+            ...blog,
+            images: imagesResult.rows.map(img => img.image_url)
+          };
+        })
     );
 
     res.json({
@@ -86,23 +125,23 @@ router.get('/:lang', async (req, res) => {
 
   } catch (error) {
     console.error('Get blogs error:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Bloglarni olishda xatolik',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
 
-// GET single blog by ID
+// GET single blog by ID (public)
 router.get('/:lang/:id', async (req, res) => {
   try {
     const { lang, id } = req.params;
-    
+
     if (!LANGUAGES.includes(lang)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Noto\'g\'ri til' 
+      return res.status(400).json({
+        success: false,
+        message: 'Noto\'g\'ri til'
       });
     }
 
@@ -122,9 +161,9 @@ router.get('/:lang/:id', async (req, res) => {
     `, [lang, id]);
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Blog topilmadi' 
+      return res.status(404).json({
+        success: false,
+        message: 'Blog topilmadi'
       });
     }
 
@@ -148,39 +187,39 @@ router.get('/:lang/:id', async (req, res) => {
 
   } catch (error) {
     console.error('Get blog error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Blogni olishda xatolik' 
+    res.status(500).json({
+      success: false,
+      message: 'Blogni olishda xatolik'
     });
   }
 });
 
-// CREATE new blog (all languages at once)
+// CREATE new blog - admin va moderator
 router.post('/', authMiddleware, async (req, res) => {
   const client = await db.pool.connect();
-  
+
   try {
     const { blogs, type, images } = req.body;
-    
+
     if (!blogs || typeof blogs !== 'object') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Blogs ma\'lumoti noto\'g\'ri' 
+      return res.status(400).json({
+        success: false,
+        message: 'Blogs ma\'lumoti noto\'g\'ri'
       });
     }
 
     if (!type || !['interview', 'article', 'fact'].includes(type)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Noto\'g\'ri type' 
+      return res.status(400).json({
+        success: false,
+        message: 'Noto\'g\'ri type'
       });
     }
 
     for (const lang of LANGUAGES) {
       if (!blogs[lang]) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `${lang} tili uchun ma'lumot yo'q` 
+        return res.status(400).json({
+          success: false,
+          message: `${lang} tili uchun ma'lumot yo'q`
         });
       }
     }
@@ -189,19 +228,19 @@ router.post('/', authMiddleware, async (req, res) => {
 
     // Create blog
     const blogResult = await client.query(
-      'INSERT INTO blogs (type) VALUES ($1) RETURNING id',
-      [type]
+        'INSERT INTO blogs (type) VALUES ($1) RETURNING id',
+        [type]
     );
     const blogId = blogResult.rows[0].id;
 
     // Add translations for all languages
     for (const lang of LANGUAGES) {
       const { title, date, source, content } = blogs[lang];
-      
+
       await client.query(
-        `INSERT INTO blog_translations (blog_id, language, title, date, source, content)
+          `INSERT INTO blog_translations (blog_id, language, title, date, source, content)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [blogId, lang, title, date, source || null, JSON.stringify(content)]
+          [blogId, lang, title, date, source || null, JSON.stringify(content)]
       );
     }
 
@@ -211,9 +250,9 @@ router.post('/', authMiddleware, async (req, res) => {
         if (images[lang] && Array.isArray(images[lang])) {
           for (let i = 0; i < images[lang].length; i++) {
             await client.query(
-              `INSERT INTO blog_images (blog_id, language, image_url, image_order, is_array)
+                `INSERT INTO blog_images (blog_id, language, image_url, image_order, is_array)
                VALUES ($1, $2, $3, $4, $5)`,
-              [blogId, lang, images[lang][i], i, false]
+                [blogId, lang, images[lang][i], i, false]
             );
           }
         }
@@ -221,6 +260,8 @@ router.post('/', authMiddleware, async (req, res) => {
     }
 
     await client.query('COMMIT');
+
+    console.log(`✅ Blog created by ${req.user.username} (${req.user.role})`);
 
     res.status(201).json({
       success: true,
@@ -231,8 +272,8 @@ router.post('/', authMiddleware, async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Create blog error:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Blog yaratishda xatolik',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
@@ -241,18 +282,18 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-// UPDATE blog
+// UPDATE blog - admin va moderator
 router.put('/:id', authMiddleware, async (req, res) => {
   const client = await db.pool.connect();
-  
+
   try {
     const { id } = req.params;
     const { blogs, type, images } = req.body;
 
     if (!blogs || typeof blogs !== 'object') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Blogs ma\'lumoti noto\'g\'ri' 
+      return res.status(400).json({
+        success: false,
+        message: 'Blogs ma\'lumoti noto\'g\'ri'
       });
     }
 
@@ -261,8 +302,8 @@ router.put('/:id', authMiddleware, async (req, res) => {
     // Update blog type if provided
     if (type && ['interview', 'article', 'fact'].includes(type)) {
       await client.query(
-        'UPDATE blogs SET type = $1 WHERE id = $2',
-        [type, id]
+          'UPDATE blogs SET type = $1 WHERE id = $2',
+          [type, id]
       );
     }
 
@@ -271,9 +312,9 @@ router.put('/:id', authMiddleware, async (req, res) => {
       if (!blogs[lang]) continue;
 
       const { title, date, source, content } = blogs[lang];
-      
+
       await client.query(
-        `INSERT INTO blog_translations (blog_id, language, title, date, source, content)
+          `INSERT INTO blog_translations (blog_id, language, title, date, source, content)
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (blog_id, language) 
          DO UPDATE SET 
@@ -282,7 +323,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
            source = EXCLUDED.source,
            content = EXCLUDED.content,
            updated_at = CURRENT_TIMESTAMP`,
-        [id, lang, title, date, source || null, JSON.stringify(content)]
+          [id, lang, title, date, source || null, JSON.stringify(content)]
       );
     }
 
@@ -296,9 +337,9 @@ router.put('/:id', authMiddleware, async (req, res) => {
         if (images[lang] && Array.isArray(images[lang])) {
           for (let i = 0; i < images[lang].length; i++) {
             await client.query(
-              `INSERT INTO blog_images (blog_id, language, image_url, image_order, is_array)
+                `INSERT INTO blog_images (blog_id, language, image_url, image_order, is_array)
                VALUES ($1, $2, $3, $4, $5)`,
-              [id, lang, images[lang][i], i, false]
+                [id, lang, images[lang][i], i, false]
             );
           }
         }
@@ -306,6 +347,8 @@ router.put('/:id', authMiddleware, async (req, res) => {
     }
 
     await client.query('COMMIT');
+
+    console.log(`✅ Blog updated by ${req.user.username} (${req.user.role})`);
 
     res.json({
       success: true,
@@ -315,8 +358,8 @@ router.put('/:id', authMiddleware, async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Update blog error:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Blogni yangilashda xatolik',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
@@ -325,22 +368,24 @@ router.put('/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// DELETE blog
+// DELETE blog - admin va moderator
 router.delete('/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
 
     const result = await db.query(
-      'DELETE FROM blogs WHERE id = $1 RETURNING id',
-      [id]
+        'DELETE FROM blogs WHERE id = $1 RETURNING id',
+        [id]
     );
 
     if (result.rowCount === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Blog topilmadi' 
+      return res.status(404).json({
+        success: false,
+        message: 'Blog topilmadi'
       });
     }
+
+    console.log(`✅ Blog deleted by ${req.user.username} (${req.user.role})`);
 
     res.json({
       success: true,
@@ -349,47 +394,9 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error('Delete blog error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Blogni o\'chirishda xatolik' 
-    });
-  }
-});
-
-// GET all blogs (admin) - barcha tillar uchun
-router.get('/admin/all', authMiddleware, async (req, res) => {
-  try {
-    const result = await db.query(`
-      SELECT 
-        b.id,
-        b.type,
-        b.created_at,
-        b.updated_at,
-        json_object_agg(
-          bt.language,
-          json_build_object(
-            'title', bt.title,
-            'date', bt.date,
-            'source', bt.source,
-            'content', bt.content
-          )
-        ) FILTER (WHERE bt.language IS NOT NULL) as translations
-      FROM blogs b
-      LEFT JOIN blog_translations bt ON b.id = bt.blog_id
-      GROUP BY b.id, b.type, b.created_at, b.updated_at
-      ORDER BY b.id DESC
-    `);
-
-    res.json({
-      success: true,
-      data: result.rows
-    });
-
-  } catch (error) {
-    console.error('Get all blogs error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Bloglarni olishda xatolik' 
+    res.status(500).json({
+      success: false,
+      message: 'Blogni o\'chirishda xatolik'
     });
   }
 });

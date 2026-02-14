@@ -6,6 +6,7 @@ export interface ContentBlock {
   title?: string;
   quote?: string;
   list?: string[];
+  image?: string;  // ← YANGI: Content ichidagi rasm
 }
 
 export interface BlogTranslation {

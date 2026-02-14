@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "init-db": "node scripts/initDatabase.js"
+    "init-db": "node scripts/initDatabase.js",
+    "create-users": "node scripts/createUsersTable.js"
   },
   "keywords": ["blog", "backend", "api", "postgresql"],
   "author": "",
@@ -17,7 +18,8 @@
     "dotenv": "^16.0.3",
     "pg": "^8.11.0",
     "multer": "2.0.2",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "bcrypt": "^5.1.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

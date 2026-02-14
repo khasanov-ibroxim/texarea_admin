@@ -1,12 +1,16 @@
 const crypto = require('crypto');
 
-// Simple token storage (in production, use Redis or database)
+// Token storage - { token: { username, role, createdAt } }
 const validTokens = new Map();
 
-// Generate token
-function generateToken(username) {
+// Generate token - yangi login da yangi token
+function generateToken(username, role) {
   const token = crypto.randomBytes(32).toString('hex');
-  validTokens.set(token, { username, createdAt: Date.now() });
+  validTokens.set(token, {
+    username,
+    role,
+    createdAt: Date.now()
+  });
   return token;
 }
 
@@ -15,13 +19,7 @@ function validateToken(token) {
   const tokenData = validTokens.get(token);
   if (!tokenData) return null;
 
-  // Check if token is expired (24 hours)
-  const expirationTime = 24 * 60 * 60 * 1000;
-  if (Date.now() - tokenData.createdAt > expirationTime) {
-    validTokens.delete(token);
-    return null;
-  }
-
+  // Token hech qachon expire bo'lmaydi - faqat logout da o'chiriladi
   return tokenData;
 }
 
@@ -30,7 +28,7 @@ function removeToken(token) {
   validTokens.delete(token);
 }
 
-// Middleware
+// Auth middleware - barcha authenticated userlar uchun
 const authMiddleware = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
@@ -41,17 +39,31 @@ const authMiddleware = (req, res, next) => {
     });
   }
 
-  const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+  const token = authHeader.substring(7);
   const tokenData = validateToken(token);
 
   if (!tokenData) {
     return res.status(401).json({
       success: false,
-      message: 'Token yaroqsiz yoki muddati tugagan'
+      message: 'Token yaroqsiz'
     });
   }
 
-  req.user = { username: tokenData.username, role: 'admin' };
+  req.user = {
+    username: tokenData.username,
+    role: tokenData.role
+  };
+  next();
+};
+
+// Admin-only middleware
+const adminOnly = (req, res, next) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Faqat admin uchun'
+    });
+  }
   next();
 };
 
@@ -59,3 +71,4 @@ module.exports = authMiddleware;
 module.exports.generateToken = generateToken;
 module.exports.validateToken = validateToken;
 module.exports.removeToken = removeToken;
+module.exports.adminOnly = adminOnly;

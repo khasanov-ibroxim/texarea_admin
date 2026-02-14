@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    domains: ['localhost'],
     remotePatterns: [
       {
         protocol: 'http',
@@ -10,6 +9,7 @@ const nextConfig = {
         pathname: '/uploads/**',
       },
     ],
+    unoptimized: true, // Development uchun
   },
 }
 

@@ -7,7 +7,18 @@ const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
 
-// Configure multer for file uploads
+// Admin-only middleware
+const adminOnly = (req, res, next) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Faqat admin rasm yuklash/o\'chirish mumkin'
+    });
+  }
+  next();
+};
+
+// Configure multer
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
     const uploadDir = path.join(__dirname, '../uploads');
@@ -44,17 +55,19 @@ const upload = multer({
   }
 });
 
-// Upload single image
+// Upload single image - ADMIN va MODERATOR (blog uchun kerak)
 router.post('/single', authMiddleware, upload.single('image'), (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Rasm yuklanmadi' 
+      return res.status(400).json({
+        success: false,
+        message: 'Rasm yuklanmadi'
       });
     }
 
     const imageUrl = `/uploads/${req.file.filename}`;
+
+    console.log(`✅ Image uploaded by ${req.user.username} (${req.user.role})`);
 
     res.json({
       success: true,
@@ -69,20 +82,20 @@ router.post('/single', authMiddleware, upload.single('image'), (req, res) => {
 
   } catch (error) {
     console.error('Upload error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Rasm yuklashda xatolik' 
+    res.status(500).json({
+      success: false,
+      message: 'Rasm yuklashda xatolik'
     });
   }
 });
 
-// Upload multiple images
+// Upload multiple images - ADMIN va MODERATOR
 router.post('/multiple', authMiddleware, upload.array('images', 10), (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Rasmlar yuklanmadi' 
+      return res.status(400).json({
+        success: false,
+        message: 'Rasmlar yuklanmadi'
       });
     }
 
@@ -93,6 +106,8 @@ router.post('/multiple', authMiddleware, upload.array('images', 10), (req, res) 
       size: file.size
     }));
 
+    console.log(`✅ ${images.length} images uploaded by ${req.user.username} (${req.user.role})`);
+
     res.json({
       success: true,
       message: `${images.length} ta rasm muvaffaqiyatli yuklandi`,
@@ -101,15 +116,15 @@ router.post('/multiple', authMiddleware, upload.array('images', 10), (req, res) 
 
   } catch (error) {
     console.error('Upload multiple error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Rasmlarni yuklashda xatolik' 
+    res.status(500).json({
+      success: false,
+      message: 'Rasmlarni yuklashda xatolik'
     });
   }
 });
 
-// Delete image
-router.delete('/:filename', authMiddleware, async (req, res) => {
+// Delete image - FAQAT ADMIN
+router.delete('/:filename', authMiddleware, adminOnly, async (req, res) => {
   try {
     const { filename } = req.params;
     const filePath = path.join(__dirname, '../uploads', filename);
@@ -118,49 +133,50 @@ router.delete('/:filename', authMiddleware, async (req, res) => {
       await fs.access(filePath);
       await fs.unlink(filePath);
 
+      console.log(`✅ Image deleted by ${req.user.username} (admin)`);
+
       res.json({
         success: true,
         message: 'Rasm muvaffaqiyatli o\'chirildi'
       });
 
     } catch (error) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Rasm topilmadi' 
+      return res.status(404).json({
+        success: false,
+        message: 'Rasm topilmadi'
       });
     }
 
   } catch (error) {
     console.error('Delete image error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Rasmni o\'chirishda xatolik' 
+    res.status(500).json({
+      success: false,
+      message: 'Rasmni o\'chirishda xatolik'
     });
   }
 });
 
-// Get all uploaded images
-router.get('/list', authMiddleware, async (req, res) => {
+// Get all uploaded images - FAQAT ADMIN
+router.get('/list', authMiddleware, adminOnly, async (req, res) => {
   try {
     const uploadDir = path.join(__dirname, '../uploads');
-    
+
     try {
       const files = await fs.readdir(uploadDir);
       const imageStats = await Promise.all(
-        files
-          .filter(file => /\.(jpg|jpeg|png|gif|webp)$/i.test(file))
-          .map(async file => {
-            const stats = await fs.stat(path.join(uploadDir, file));
-            return {
-              filename: file,
-              url: `/uploads/${file}`,
-              size: stats.size,
-              createdAt: stats.birthtime
-            };
-          })
+          files
+              .filter(file => /\.(jpg|jpeg|png|gif|webp)$/i.test(file))
+              .map(async file => {
+                const stats = await fs.stat(path.join(uploadDir, file));
+                return {
+                  filename: file,
+                  url: `/uploads/${file}`,
+                  size: stats.size,
+                  createdAt: stats.birthtime
+                };
+              })
       );
 
-      // Sort by creation date (newest first)
       imageStats.sort((a, b) => b.createdAt - a.createdAt);
 
       res.json({
@@ -169,7 +185,7 @@ router.get('/list', authMiddleware, async (req, res) => {
       });
 
     } catch (error) {
-      return res.json({ 
+      return res.json({
         success: true,
         data: [],
         message: 'Upload papkasi bo\'sh'
@@ -178,33 +194,33 @@ router.get('/list', authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error('List images error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Rasmlar ro\'yxatini olishda xatolik' 
+    res.status(500).json({
+      success: false,
+      message: 'Rasmlar ro\'yxatini olishda xatolik'
     });
   }
 });
 
-// Error handling for multer
+// Error handling
 router.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Fayl hajmi 10MB dan oshmasligi kerak' 
+      return res.status(400).json({
+        success: false,
+        message: 'Fayl hajmi 10MB dan oshmasligi kerak'
       });
     }
     if (error.code === 'LIMIT_FILE_COUNT') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Maksimal 10 ta rasm yuklash mumkin' 
+      return res.status(400).json({
+        success: false,
+        message: 'Maksimal 10 ta rasm yuklash mumkin'
       });
     }
   }
-  
-  res.status(400).json({ 
-    success: false, 
-    message: error.message || 'Fayl yuklashda xatolik' 
+
+  res.status(400).json({
+    success: false,
+    message: error.message || 'Fayl yuklashda xatolik'
   });
 });
 
