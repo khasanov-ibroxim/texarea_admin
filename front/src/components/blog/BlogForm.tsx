@@ -1,11 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Language, BlogType, ContentBlock, BlogFormData } from '@/types';
-import { FiPlus, FiTrash2, FiImage, FiUpload } from 'react-icons/fi';
+import { Language, BlogType, BlogFormData } from '@/types';
+import { FiUpload, FiTrash2 } from 'react-icons/fi';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
+import 'react-quill/dist/quill.snow.css';
+
+// React Quill ni dynamic import qilish (SSR muammosini hal qilish uchun)
+const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
 
 const LANGUAGES: Language[] = ['ru', 'en', 'es', 'fr'];
 
@@ -16,6 +21,29 @@ const MONTHS = {
     es: ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'],
     fr: ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'],
 };
+
+// Quill modules (toolbar configuration)
+const quillModules = {
+    toolbar: [
+        [{ 'header': [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+        [{ 'indent': '-1'}, { 'indent': '+1' }],
+        ['blockquote', 'code-block'],
+        [{ 'align': [] }],
+        ['link', 'image'],
+        ['clean']
+    ],
+};
+
+const quillFormats = [
+    'header',
+    'bold', 'italic', 'underline', 'strike',
+    'list', 'bullet', 'indent',
+    'blockquote', 'code-block',
+    'align',
+    'link', 'image'
+];
 
 interface Props {
     initialData?: BlogFormData;
@@ -37,10 +65,10 @@ export default function BlogForm({ initialData, onSubmit, submitLabel }: Props) 
         initialData || {
             type: 'article',
             blogs: {
-                ru: { title: '', date: '', content: [] },
-                en: { title: '', date: '', content: [] },
-                es: { title: '', date: '', content: [] },
-                fr: { title: '', date: '', content: [] },
+                ru: { title: '', date: '', content: '' },
+                en: { title: '', date: '', content: '' },
+                es: { title: '', date: '', content: '' },
+                fr: { title: '', date: '', content: '' },
             },
             images: {
                 ru: [],
@@ -71,7 +99,7 @@ export default function BlogForm({ initialData, onSubmit, submitLabel }: Props) 
 
         switch (lang) {
             case 'en':
-                return `${day} ${month} ${year}`; // 14 February 2026
+                return `${day} ${month} ${year}`;
             case 'es':
                 return `${day} de ${month} de ${year}`;
             default: // ru, fr
@@ -110,83 +138,6 @@ export default function BlogForm({ initialData, onSubmit, submitLabel }: Props) 
                 },
             },
         }));
-    };
-
-    // Content block qo'shish
-    const addContentBlock = (lang: Language, blockType: 'text' | 'title' | 'quote' | 'list' | 'image') => {
-        let newBlock: ContentBlock;
-
-        if (blockType === 'list') {
-            newBlock = { list: [''] };
-        } else if (blockType === 'image') {
-            newBlock = { image: '' };
-        } else {
-            newBlock = { [blockType]: '' };
-        }
-
-        const currentContent = [...formData.blogs[lang].content];
-        currentContent.push(newBlock);
-        updateBlog(lang, 'content', currentContent);
-
-        // Boshqa tillarga ham qo'shish
-        if (confirm('Boshqa tillarga ham shu content blokini qo\'shmoqchimisiz?')) {
-            setFormData((prev) => {
-                const updatedBlogs = { ...prev.blogs };
-                LANGUAGES.forEach((otherLang) => {
-                    if (otherLang !== lang) {
-                        const otherContent = [...updatedBlogs[otherLang].content];
-
-                        // Image block uchun - bir xil image URL ni qo'shish
-                        if (blockType === 'image') {
-                            otherContent.push({ image: '' }); // Bo'sh qo'shamiz, keyinchalik sync qilamiz
-                        } else if (blockType === 'list') {
-                            otherContent.push({ list: [''] });
-                        } else {
-                            otherContent.push({ [blockType]: '' });
-                        }
-
-                        updatedBlogs[otherLang] = {
-                            ...updatedBlogs[otherLang],
-                            content: otherContent,
-                        };
-                    }
-                });
-                return { ...prev, blogs: updatedBlogs };
-            });
-            toast.success('Content blok barcha tillarga qo\'shildi!');
-        }
-    };
-
-    const updateContentBlock = (lang: Language, index: number, value: any) => {
-        const newContent = [...formData.blogs[lang].content];
-        newContent[index] = value;
-        updateBlog(lang, 'content', newContent);
-
-        // Agar image block bo'lsa, barcha tillarga sync qilish
-        if ('image' in value && value.image) {
-            setFormData((prev) => {
-                const updatedBlogs = { ...prev.blogs };
-                LANGUAGES.forEach((otherLang) => {
-                    if (otherLang !== lang && updatedBlogs[otherLang].content[index]) {
-                        const otherContent = [...updatedBlogs[otherLang].content];
-                        if ('image' in otherContent[index]) {
-                            otherContent[index] = { image: value.image }; // Bir xil rasm
-                            updatedBlogs[otherLang] = {
-                                ...updatedBlogs[otherLang],
-                                content: otherContent,
-                            };
-                        }
-                    }
-                });
-                return { ...prev, blogs: updatedBlogs };
-            });
-            toast.success('Rasm barcha tillarga dublikat qilindi!');
-        }
-    };
-
-    const removeContentBlock = (lang: Language, index: number) => {
-        const newContent = formData.blogs[lang].content.filter((_, i) => i !== index);
-        updateBlog(lang, 'content', newContent);
     };
 
     // Main rasm yuklash
@@ -263,38 +214,6 @@ export default function BlogForm({ initialData, onSubmit, submitLabel }: Props) 
         });
     };
 
-    // Content ichiga rasm qo'shish
-    const handleContentImageUpload = async (lang: Language, blockIndex: number) => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-
-        input.onchange = async (e: any) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            try {
-                const formDataUpload = new FormData();
-                formDataUpload.append('image', file);
-
-                const response = await api.post('/upload/single', formDataUpload, {
-                    headers: { 'Content-Type': 'multipart/form-data' },
-                });
-
-                if (response.data.success) {
-                    const imageUrl = response.data.data.url;
-
-                    // Hozirgi tilda rasm qo'shish va barcha tillarga sync
-                    updateContentBlock(lang, blockIndex, { image: imageUrl });
-                }
-            } catch (error: any) {
-                toast.error('Rasm yuklashda xatolik');
-            }
-        };
-
-        input.click();
-    };
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitting(true);
@@ -311,7 +230,8 @@ export default function BlogForm({ initialData, onSubmit, submitLabel }: Props) 
     const getImageUrl = (url: string) => {
         if (!url) return '';
         if (url.startsWith('http')) return url;
-        return `${process.env.NEXT_PUBLIC_UPLOADS_URL || 'http://localhost:5000'}${url}`;
+        const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+        return `${process.env.NEXT_PUBLIC_UPLOADS_URL || 'http://localhost:5000'}${cleanUrl}`;
     };
 
     return (
@@ -494,7 +414,6 @@ export default function BlogForm({ initialData, onSubmit, submitLabel }: Props) 
                         </label>
                         <p className="text-xs text-gray-500 mb-2">
                             Bu blog manbasini ko'rsatadi. Masalan: "Reuters", "BBC", "CNN" va h.k.
-                            Blog ostida "Manba: Reuters" deb ko'rsatiladi.
                         </p>
                         <input
                             type="text"
@@ -505,170 +424,25 @@ export default function BlogForm({ initialData, onSubmit, submitLabel }: Props) 
                         />
                     </div>
 
-                    {/* Content Blocks */}
+                    {/* Rich Text Editor */}
                     <div>
-                        <div className="flex items-center justify-between mb-4">
-                            <label className="block text-sm font-medium text-gray-700">Content Blocks</label>
-                            <div className="flex gap-2 flex-wrap">
-                                <button
-                                    type="button"
-                                    onClick={() => addContentBlock(currentLang, 'text')}
-                                    className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                                >
-                                    + Text
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => addContentBlock(currentLang, 'title')}
-                                    className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                                >
-                                    + Title
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => addContentBlock(currentLang, 'quote')}
-                                    className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
-                                >
-                                    + Quote
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => addContentBlock(currentLang, 'list')}
-                                    className="px-3 py-1 bg-orange-600 text-white text-sm rounded hover:bg-orange-700"
-                                >
-                                    + List
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => addContentBlock(currentLang, 'image')}
-                                    className="px-3 py-1 bg-pink-600 text-white text-sm rounded hover:bg-pink-700"
-                                >
-                                    + Image
-                                </button>
-                            </div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Content (Rich Text Editor)
+                        </label>
+                        <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
+                            <ReactQuill
+                                theme="snow"
+                                value={currentBlog.content}
+                                onChange={(value) => updateBlog(currentLang, 'content', value)}
+                                modules={quillModules}
+                                formats={quillFormats}
+                                className="min-h-[400px]"
+                                placeholder="Blog matnini yozing..."
+                            />
                         </div>
-
-                        <div className="space-y-4">
-                            {currentBlog.content.map((block, index) => (
-                                <div key={index} className="border border-gray-200 rounded-lg p-4">
-                                    <div className="flex items-start justify-between mb-2">
-                    <span className="text-xs font-semibold text-gray-500 uppercase">
-                      {'text' in block ? 'Text' : 'title' in block ? 'Title' : 'quote' in block ? 'Quote' : 'image' in block ? 'Image (Content ichida)' : 'List'}
-                    </span>
-                                        <button type="button" onClick={() => removeContentBlock(currentLang, index)} className="text-red-600 hover:text-red-800">
-                                            <FiTrash2 size={16} />
-                                        </button>
-                                    </div>
-
-                                    {'text' in block && (
-                                        <textarea
-                                            value={block.text}
-                                            onChange={(e) => updateContentBlock(currentLang, index, { text: e.target.value })}
-                                            rows={4}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                            placeholder="Enter text..."
-                                        />
-                                    )}
-
-                                    {'title' in block && (
-                                        <input
-                                            type="text"
-                                            value={block.title}
-                                            onChange={(e) => updateContentBlock(currentLang, index, { title: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                            placeholder="Enter title..."
-                                        />
-                                    )}
-
-                                    {'quote' in block && (
-                                        <textarea
-                                            value={block.quote}
-                                            onChange={(e) => updateContentBlock(currentLang, index, { quote: e.target.value })}
-                                            rows={3}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                            placeholder="Enter quote..."
-                                        />
-                                    )}
-
-                                    {'image' in block && (
-                                        <div>
-                                            {block.image ? (
-                                                <div className="relative w-full h-64 border rounded-lg overflow-hidden">
-                                                    <Image
-                                                        src={getImageUrl(block.image)}
-                                                        alt="Content"
-                                                        fill
-                                                        className="object-contain"
-                                                        unoptimized
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => updateContentBlock(currentLang, index, { image: '' })}
-                                                        className="absolute top-2 right-2 p-2 bg-red-600 text-white rounded hover:bg-red-700"
-                                                    >
-                                                        <FiTrash2 />
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleContentImageUpload(currentLang, index)}
-                                                    className="w-full py-12 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 flex flex-col items-center justify-center gap-2 transition"
-                                                >
-                                                    <FiImage size={48} className="text-gray-400" />
-                                                    <span className="text-sm text-gray-500">Click to upload image</span>
-                                                    <span className="text-xs text-gray-400">(Barcha tillarga avtomatik dublikat)</span>
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {'list' in block && (
-                                        <div className="space-y-2">
-                                            {block.list?.map((item, i) => (
-                                                <div key={i} className="flex gap-2">
-                                                    <input
-                                                        type="text"
-                                                        value={item}
-                                                        onChange={(e) => {
-                                                            const newList = [...(block.list || [])];
-                                                            newList[i] = e.target.value;
-                                                            updateContentBlock(currentLang, index, { list: newList });
-                                                        }}
-                                                        className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
-                                                        placeholder={`Item ${i + 1}...`}
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            const newList = block.list?.filter((_, idx) => idx !== i);
-                                                            updateContentBlock(currentLang, index, { list: newList });
-                                                        }}
-                                                        className="text-red-600 hover:text-red-800"
-                                                    >
-                                                        <FiTrash2 size={16} />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    const newList = [...(block.list || []), ''];
-                                                    updateContentBlock(currentLang, index, { list: newList });
-                                                }}
-                                                className="text-sm text-indigo-600 hover:text-indigo-800"
-                                            >
-                                                + Add item
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-
-                            {currentBlog.content.length === 0 && (
-                                <p className="text-gray-500 text-center py-8">No content blocks. Add some using the buttons above.</p>
-                            )}
-                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                            Rich text editor: bold, italic, sarlavhalar, ro'yxatlar, link va rasmlar qo'shishingiz mumkin.
+                        </p>
                     </div>
                 </div>
             </div>

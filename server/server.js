@@ -21,15 +21,15 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Static files - PUBLIC ACCESS (no auth required for blog images)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // Debug middleware
 app.use((req, res, next) => {
   console.log(`\n${req.method} ${req.path}`);
-  console.log('Authorization:', req.headers.authorization);
+  console.log('Authorization:', req.headers.authorization || 'none');
   next();
 });
-
-// Static files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -89,8 +89,6 @@ async function initializeDirectories() {
     console.log('✓ uploads papkasi yaratildi');
   }
 }
-
-
 
 // Start server
 async function startServer() {

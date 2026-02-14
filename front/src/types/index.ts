@@ -1,19 +1,11 @@
 export type BlogType = 'interview' | 'article' | 'fact';
 export type Language = 'ru' | 'en' | 'es' | 'fr';
 
-export interface ContentBlock {
-  text?: string;
-  title?: string;
-  quote?: string;
-  list?: string[];
-  image?: string;  // ← YANGI: Content ichidagi rasm
-}
-
 export interface BlogTranslation {
   title: string;
   date: string;
   source?: string;
-  content: ContentBlock[];
+  content: string; // ← Rich text HTML string
 }
 
 export interface Blog {
@@ -37,6 +29,7 @@ export interface BlogFormData {
 }
 
 export interface User {
+  id?: number;
   username: string;
   role: string;
 }
