@@ -1,21 +1,24 @@
-// lib/api.ts
 import axios from 'axios';
 
 const api = axios.create({
     baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
-    withCredentials: true, // ← BU JUda MUHIM! Cookie lar bilan ishlash uchun
     headers: {
         'Content-Type': 'application/json',
     },
 });
 
-// Request interceptor - debug uchun
+// Request interceptor - add token to requests
 api.interceptors.request.use(
     (config) => {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+
         console.log('🚀 Request:', {
             method: config.method,
             url: config.url,
-            withCredentials: config.withCredentials,
+            hasToken: !!token,
         });
         return config;
     },
@@ -24,14 +27,13 @@ api.interceptors.request.use(
     }
 );
 
-// Response interceptor - debug uchun
+// Response interceptor - handle auth errors
 api.interceptors.response.use(
     (response) => {
         console.log('✅ Response:', {
             url: response.config.url,
             status: response.status,
             data: response.data,
-            headers: response.headers,
         });
         return response;
     },
@@ -41,6 +43,16 @@ api.interceptors.response.use(
             status: error.response?.status,
             data: error.response?.data,
         });
+
+        // If 401 unauthorized, redirect to login
+        if (error.response?.status === 401) {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user');
+            if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+                window.location.href = '/login';
+            }
+        }
+
         return Promise.reject(error);
     }
 );

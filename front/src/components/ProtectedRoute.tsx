@@ -1,37 +1,25 @@
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { useEffect, useState } from 'react';
-import api from '@/lib/api';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, setUser } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
+  const { user, loading } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
-    // Faqat user ma'lumotlarini yuklash
-    // Middleware token ni allaqachon tekshirgan
-    const loadUser = async () => {
-      try {
-        const response = await api.get('/auth/check');
-        if (response.data.success && response.data.user) {
-          setUser(response.data.user);
-        }
-      } catch (error) {
-        console.error('Failed to load user:', error);
-      } finally {
-        setIsLoading(false);
+    if (!loading && !user) {
+      // No user and not loading - redirect to login
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        console.log('No token found, redirecting to login');
+        router.push('/login');
       }
-    };
-
-    if (!user) {
-      loadUser();
-    } else {
-      setIsLoading(false);
     }
-  }, [user, setUser]);
+  }, [user, loading, router]);
 
-  if (isLoading) {
+  if (loading) {
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50">
           <div className="text-center">
@@ -40,6 +28,10 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
           </div>
         </div>
     );
+  }
+
+  if (!user) {
+    return null;
   }
 
   return <>{children}</>;

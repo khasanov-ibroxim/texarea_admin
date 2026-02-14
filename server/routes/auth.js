@@ -1,5 +1,6 @@
 const express = require('express');
 const authMiddleware = require('../middleware/auth');
+const { generateToken, validateToken, removeToken } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -28,37 +29,20 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // Set session
-    req.session.user = {
-      username,
-      role: 'admin'
-    };
+    // Generate token
+    const token = generateToken(username);
 
     console.log('✅ Login successful');
-    console.log('📝 Session created:', req.sessionID);
-    console.log('👤 User:', req.session.user);
+    console.log('🎫 Token generated');
 
-    // MUHIM: session.save() ishlatish - cookie set bo'lishini ta'minlaydi
-    req.session.save((err) => {
-      if (err) {
-        console.error('❌ Session save error:', err);
-        return res.status(500).json({
-          success: false,
-          message: 'Session saqlashda xatolik'
-        });
+    res.json({
+      success: true,
+      message: 'Login muvaffaqiyatli',
+      token,
+      user: {
+        username,
+        role: 'admin'
       }
-
-      console.log('💾 Session saved successfully');
-      console.log('🍪 Cookie should be set: connect.sid');
-
-      res.json({
-        success: true,
-        message: 'Login muvaffaqiyatli',
-        user: {
-          username,
-          role: 'admin'
-        }
-      });
     });
 
   } catch (error) {
@@ -71,48 +55,30 @@ router.post('/login', async (req, res) => {
 });
 
 // Check auth
-router.get('/check', (req, res) => {
+router.get('/check', authMiddleware, (req, res) => {
   console.log('\n🔍 Auth check');
-  console.log('Session ID:', req.sessionID);
-  console.log('Session user:', req.session?.user);
+  console.log('User:', req.user);
 
-  if (req.session && req.session.user) {
-    console.log('✅ Authenticated');
-    res.json({
-      success: true,
-      user: req.session.user
-    });
-  } else {
-    console.log('❌ Not authenticated');
-    res.status(401).json({
-      success: false,
-      message: 'Unauthorized'
-    });
-  }
+  res.json({
+    success: true,
+    user: req.user
+  });
 });
 
 // Logout
 router.post('/logout', (req, res) => {
   console.log('\n👋 Logout request');
-  console.log('Session ID:', req.sessionID);
 
-  req.session.destroy((err) => {
-    if (err) {
-      console.error('❌ Logout error:', err);
-      return res.status(500).json({
-        success: false,
-        message: 'Logout xatosi'
-      });
-    }
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    removeToken(token);
+    console.log('✅ Token removed');
+  }
 
-    console.log('✅ Session destroyed');
-    res.clearCookie('connect.sid');
-    console.log('🍪 Cookie cleared');
-
-    res.json({
-      success: true,
-      message: 'Logout muvaffaqiyatli'
-    });
+  res.json({
+    success: true,
+    message: 'Logout muvaffaqiyatli'
   });
 });
 
